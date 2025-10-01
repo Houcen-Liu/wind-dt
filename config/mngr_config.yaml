@@ -1,0 +1,19 @@
+data_manager:
+  kind: mqtt
+  options:
+    broker: "localhost"
+    port: 1883
+    speedup: 300000
+    number_turbines: 1
+    data_path: "data/"
+    data_year: "2020"
+    data_items:
+      - "Date and time"
+      - "Wind speed (m/s)"
+      - "Wind direction (°)"
+      - "Energy Export (kWh)"
+      - "Energy Import (kWh)"
+      - "Power (kW)"
+      - "Ambient temperature (converter) (°C)"
+      - "Rotor speed (RPM)"
+      - "Yaw bearing angle (°)"

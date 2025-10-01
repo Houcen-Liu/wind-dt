@@ -6,3 +6,6 @@ class StreamProvider(abc.ABC):
     @abc.abstractmethod
     async def stream(self) -> AsyncIterator[MeteoFrame]:
         ...
+
+    async def close(self):
+        ...

@@ -102,3 +102,6 @@ class CSVReplayStream(StreamProvider):
             payload = {k: row[k] for k in df.columns if k != self.timestamp_col}
             yield MeteoFrame(ts=row[self.timestamp_col].to_pydatetime(), payload=payload)
             await asyncio.sleep(sleep)
+    
+    def close(self):
+        return

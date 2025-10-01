@@ -1,4 +1,11 @@
 stream:
+  #kind: mqtt
+  #options:
+  #  broker: "localhost"
+  #  port: 1883
+  #  topics:
+  #    - "turbine/state1"
+
   kind: csv_replay
   options:
     path: "data/Turbine_Data_Kelmarsh_1_2020-01-01_-_2021-01-01_228.csv"
@@ -58,5 +65,11 @@ sinks:
       # Optional: choose exact columns & their order
       fields: ["ts", "model", "v", "y", "y_hat", "pi"]
       append: true
+
+  #- kind: mqtt
+  #  options:
+  #    broker: "localhost"
+  #    port: 1883
+  #    topics:
   #- kind: websocket
   #  options: {url: "ws://localhost:8765/dt"}

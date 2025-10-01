@@ -8,6 +8,7 @@ from ..types import MeteoFrame
 
 class MQTTStream(StreamProvider):
     def __init__(self,broker,port,topics):
+        self.running = True
         self.broker = broker
         self.port = port
         self.topics = topics
@@ -34,7 +35,13 @@ class MQTTStream(StreamProvider):
         )
 
     async def stream(self):
-        while True:
+        while self.running:
             topic, payload = await self.queue.get()
+
             clean_payload = {k: v for k, v in payload.items() if k != "Date and time"}
             yield MeteoFrame(ts=datetime.strptime(payload["Date and time"], '%Y-%m-%d %H:%M:%S'), payload=clean_payload)
+
+    def close(self):
+        self.client.disconnect()
+        self.running = False
+

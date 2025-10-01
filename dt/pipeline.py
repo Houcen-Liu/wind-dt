@@ -1,5 +1,6 @@
 import asyncio, yaml, numpy as np
 from .streaming.csv_replay import CSVReplayStream
+from .streaming.mqtt_stream import MQTTStream
 from .processing.features import build_features
 from .processing.transforms import apply_transforms
 from .twin.performance import PerformanceTwin
@@ -7,6 +8,7 @@ from .models.lgbm import LGBMRegressorWrapper
 from .models.svr import SVRWrapper
 from .sinks.console import ConsoleSink
 from .sinks.csv import CSVSink
+from .sinks.mqtt_sink import MQTTSink
 
 import math
 try:
@@ -31,6 +33,10 @@ class Pipeline:
                     fields=opts.get("fields"),           # optional explicit column order
                     append=opts.get("append", True),
                 ))
+            elif sk["kind"] == "mqtt":
+                opts = sk.get("options", {})
+                self.sinks.append(MQTTSink(opts.get("broker"),opts.get("port")))
+
         if not self.sinks:
             self.sinks = [ConsoleSink()]
 
@@ -49,7 +55,13 @@ class Pipeline:
                 comment=scfg["options"].get("comment"),
                 header_key=scfg["options"].get("header_key"),
                 quotechar=scfg["options"].get("quotechar", '"'),
-        )
+            )
+        elif scfg["kind"] == "mqtt":
+                return MQTTStream(
+                scfg["options"]["broker"],
+                scfg["options"]["port"],
+                scfg["options"]["topics"]
+            )
         raise NotImplementedError("Unknown stream kind: %s" % scfg["kind"])
 
     def _make_model(self, feature_names):
@@ -120,7 +132,8 @@ class Pipeline:
                 twin  = PerformanceTwin(model, pcfg["guardrails"])
                 self._model_name = self.cfg["model"]["kind"]  # e.g., "lgbm"
                 break
-
+        
+        stream.close()
         # Rewind: new stream for live replay
         stream_live = self._make_stream()
         async for frame in stream_live.stream():
@@ -162,4 +175,9 @@ class Pipeline:
                 "model": getattr(self, "_model_name", "unknown"),
             })
             for s in self.sinks:
-                s.write(out)
+                if isinstance(s, MQTTSink):
+                    s.write(out,"ml/svrPredictions1")
+                else:
+                    s.write(out)
+
+        stream.close()
