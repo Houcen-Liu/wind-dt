@@ -176,7 +176,7 @@ class Pipeline:
             })
             for s in self.sinks:
                 if isinstance(s, MQTTSink):
-                    s.write(out,"ml/svrPredictions1")
+                    s.write(out,"ml/predictions1")
                 else:
                     s.write(out)
 
