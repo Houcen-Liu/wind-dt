@@ -12,3 +12,4 @@ data/*
 # Outputs
 out/
 #*.csv
+  .DS_Store
