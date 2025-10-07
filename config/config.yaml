@@ -1,14 +1,16 @@
 stream:
-  #kind: mqtt
-  #options:
-  #  broker: "localhost"
-  #  port: 1883
-  #  topics:
-  #    - "turbine/state1"
+  kind: mqtt
+  options:
+    broker: "localhost"         # MQTT broker address
+    port: 1883                  # MQTT broker port
+    topics:
+      - "Kelmarsh/Turbine1/Data"        # raw SCADA data
+      - "Kelmarsh/Turbine1/Prediction"  # model predictions
+      - "Kelmarsh/Turbine1/Results"     # predicted vs actual results
 
   kind: csv_replay
   options:
-    path: "data/Turbine_Data_Kelmarsh_1_2020-01-01_-_2021-01-01_228.csv"
+    path: "./data/Kelmarsh_SCADA_2020_3086/Turbine_Data_Kelmarsh_1_2020-01-01_-_2021-01-01_228.csv"
     timestamp_col: "Date and time"
     speedup: 300000            
     loop: true
