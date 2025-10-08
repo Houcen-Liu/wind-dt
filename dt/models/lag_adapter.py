@@ -57,6 +57,13 @@ class LagFeatureForecastAdapter(ModelWrapper):
         # fixed feature order after first fit
         self.feature_order: Optional[List[str]] = None
 
+        # when this adapter is used in a context that does not supply
+        # multi‑horizon training targets (i.e. a simple X/y pair), we
+        # train a single base model instead of multiple horizon models.
+        # this attribute holds that fallback model.  see `fit()` for
+        # details.
+        self._single_model: Optional[object] = None
+
     # ---- History management (call this each tick with current x, y if available) ----
     def update_after_step(self, x: Dict[str, float], y_actual: Optional[float] = None):
         # store y into history if you include it in base_inputs
@@ -93,17 +100,75 @@ class LagFeatureForecastAdapter(ModelWrapper):
     # ---- Training API (batch) ----
     def fit(self, Xy: pd.DataFrame, y_cols: Dict[str, str]):
         """
-        Xy: dataframe that already contains base inputs timeline AND the lag/rolling features computed historically,
-            plus one column per horizon target (window-mean or point-ahead), named by y_cols.
-        y_cols: mapping horizon->column name, e.g. {"H1":"y_H1", "D1":"y_D1", ...}
+        Fit the adapter using either a full multi‑horizon training dataset or a
+        simple feature matrix and target vector.
+
+        When called with the expected signature for lag forecasting (`Xy`
+        containing lag/rolling features and multiple target columns and
+        `y_cols` being a mapping of horizon name to column name), this method
+        trains a separate base model for each horizon.  The resulting
+        predictions will be returned as a dictionary from horizon name to
+        prediction.
+
+        If `y_cols` is not a mapping (for example when this adapter is used
+        through a generic `ModelWrapper` interface, which passes a 2‑D
+        feature matrix and a 1‑D target array), the method will instead
+        interpret `Xy` as the feature matrix and `y_cols` as the target
+        vector.  In that case a single base model is trained and stored on
+        `_single_model`, and subsequent predictions will return a scalar
+        rather than a horizon‑mapped dictionary.
         """
-        # infer feature order from provided columns if missing
+
+        # -- Branch: fallback for simple X/y training --
+        # Accept list‑like y_cols (list/Series/ndarray) instead of a mapping.
+        from collections.abc import Mapping
+        if not isinstance(y_cols, Mapping):
+            # Treat the first argument as the feature matrix and the second as the
+            # target vector.  Xy may be a list of lists, numpy array or DataFrame.
+            X = Xy
+            y = y_cols
+
+            # Determine feature order if not already set.  When called from
+            # `Pipeline._make_model` the pipeline will set `feature_order` on
+            # this adapter, so we respect an existing order.  Otherwise, we
+            # attempt to infer it from a pandas DataFrame or fall back to
+            # indexing numerically.
+            if self.feature_order is None:
+                if isinstance(X, pd.DataFrame):
+                    self.feature_order = list(X.columns)
+                else:
+                    # no column names available; create a generic order based on
+                    # number of features in the first row
+                    try:
+                        n_feats = len(X[0])
+                    except Exception:
+                        n_feats = 0
+                    self.feature_order = [f"f{i}" for i in range(n_feats)]
+
+            # Convert X into a DataFrame for consistent handling with base models.
+            X_df = pd.DataFrame(X, columns=self.feature_order)
+            y_series = pd.Series(list(y), dtype=float)
+            # Filter out non‑finite targets
+            mask = y_series.notna() & np.isfinite(y_series)
+            if mask.sum() == 0:
+                return
+            model = self.base_factory()
+            model.fit(X_df[mask], y_series[mask])
+            self._single_model = model
+            # Reset multi‑horizon models to avoid confusion on subsequent fits
+            self.models.clear()
+            return
+
+        # -- Standard branch: multi‑horizon training --
+        # Ensure Xy is a DataFrame and y_cols maps horizon name -> column in Xy
         if self.feature_order is None:
+            # remove target columns to infer features
             non_feat = set(y_cols.values())
             self.feature_order = [c for c in Xy.columns if c not in non_feat]
 
         X = Xy[self.feature_order]
         for hz, yname in y_cols.items():
+            # convert to float and filter out missing
             y = Xy[yname].astype(float)
             mask = y.notna() & np.isfinite(y)
             if mask.sum() < 20:
@@ -114,9 +179,45 @@ class LagFeatureForecastAdapter(ModelWrapper):
 
     # ---- Prediction API (streaming) ----
     def predict(self, x_current: Dict[str, float]) -> Dict[str, float]:
-        # NOTE: prediction uses ONLY history; x_current is not strictly needed but kept for interface parity
+        """
+        Generate a prediction from the adapter.
+
+        If the adapter has been trained in multi‑horizon mode (i.e. `fit()` was
+        called with a mapping of horizon targets), this returns a dictionary
+        mapping each horizon name to its forecast.  Predictions rely solely
+        on the historical ring buffers maintained via `update_after_step()`.
+
+        If the adapter has instead been trained in single‑horizon mode (i.e.
+        `fit()` was called with a simple target vector), this will return a
+        scalar prediction produced by the single base model and constructed
+        from the current raw features rather than historical lag features.
+        """
+        # If a single fallback model is present, bypass lag feature logic and
+        # produce a simple point estimate from the raw feature vector.
+        if self._single_model is not None:
+            # Ensure feature order is defined; default to sorted keys of x_current
+            if self.feature_order is None:
+                self.feature_order = sorted(list(x_current.keys()))
+            # Build a 1‑row DataFrame with the expected feature order
+            X_df = pd.DataFrame([[x_current.get(f, 0.0) for f in self.feature_order]],
+                                columns=self.feature_order)
+            # Return a float prediction to satisfy ModelWrapper contract
+            return float(self._single_model.predict(X_df)[0])
+
+        # Otherwise use historical lag/rolling features for multi‑horizon forecasts
         feats = self._make_features_from_history()
-        if not feats or not self.models:
+        # If no multi‑horizon models have been trained, return empty
+        if not self.models:
             return {}
+        # If there are no lag/roll features available yet (e.g. at the very
+        # beginning of streaming), fall back to using the raw feature vector
+        if not feats:
+            # Ensure feature_order is known; if not, infer from x_current
+            if self.feature_order is None:
+                self.feature_order = sorted(list(x_current.keys()))
+            X_df = pd.DataFrame([[x_current.get(f, 0.0) for f in self.feature_order]],
+                                columns=self.feature_order)
+            return {hz: float(m.predict(X_df)[0]) for hz, m in self.models.items()}
+        # Otherwise use the lag/roll feature DataFrame
         Xdf = self._features_dataframe(feats)
         return {hz: float(m.predict(Xdf)[0]) for hz, m in self.models.items()}
