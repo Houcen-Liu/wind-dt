@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data
+data/*
+
+# Outputs
+out/
+#*.csv
+  .DS_Store
+
+.vscode/

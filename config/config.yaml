@@ -1,0 +1,109 @@
+stream:
+  kind: mqtt
+  options:
+    broker: "localhost"         # MQTT broker address
+    port: 1883                  # MQTT broker port
+    topics:
+      - "Kelmarsh/Turbine/state1"
+
+  #kind: csv_replay
+  #options:
+  #  path: "./data/Kelmarsh_SCADA_2020_3086/Turbine_Data_Kelmarsh_1_2020-01-01_-_2021-01-01_228.csv"
+  #  timestamp_col: "Date and time"
+  #  speedup: 300000            
+  #  loop: true
+  #  time_col_tz: "UTC"
+  #  sep: ","           
+  #  encoding: "utf-8"   
+  #  on_bad_lines: "warn"  # "skip" to drop malformed lines
+  #  header_key: "Date and time"        
+  #  comment: "#" # <-- skip the description block
+
+pipeline:
+  warmup_size: 5000
+
+processing:
+  transforms: 
+    - drop_negatives: ["Power (kW)", "Density adjusted wind speed (m/s)", "Wind speed (m/s)"]
+    - clip: {col: "Power (kW)", min: 0.0}
+  features:
+    primary_speed: "Wind speed (m/s)" # consider switching to "Density adjusted wind  speed (m/s)" 
+    use_direction: true
+    temperature_col: "Nacelle ambient temperature (°C)"
+    add_time_cyclical: true
+    add_ti: true
+  guardrails:
+    enabled: true
+    cut_in: 3.0
+    rated_speed: 12.0
+    cut_out: 25.0
+    rated_power: 2050     # kW (Senvion MM92 example)
+
+model:
+  kind: lag_adapter
+  options:
+    base_model: lgbm          # or "svr"
+    step_per_hour: 6          # 10-min cadence
+    horizons_hours:           # will be multiplied by step_per_hour
+      H1: 1
+      D1: 24
+      W1: 168
+      M1: 720                 # 30 days
+    base_inputs: ["v","y","wdir_sin","wdir_cos","temp"]
+
+    # Historical feature recipe (in rows)
+    lags:
+      v: [1,6,12]             # 10m, 1h, 2h
+      y: [1,6,12]
+    rolls:
+      v: [6,36]               # 1h, 6h windows
+      y: [6,36]
+    roll_stats: ["mean","std"]
+
+    # Model params
+    lgbm_params:
+      n_estimators: 800
+      learning_rate: 0.05
+      max_depth: 6
+      min_child_samples: 80
+
+    svr_params:
+      kernel: "rbf"      # rbf | linear | poly | sigmoid
+      C: 75.0            # try 1.0, 10.0, 100.0
+      epsilon: 0.05       # tube width
+      gamma: "auto"     # "scale" | "auto" | float
+      degree: 3          # only for poly
+      coef0: 0.0         # poly/sigmoid
+  #kind: svr
+  #options:
+    #kernel: "rbf"      # rbf | linear | poly | sigmoid
+    #C: 75.0            # try 1.0, 10.0, 100.0
+    #epsilon: 0.05       # tube width
+    #gamma: "auto"     # "scale" | "auto" | float
+    #degree: 3          # only for poly
+    #coef0: 0.0         # poly/sigmoid
+  #kind: lgbm
+  #options:
+    #monotone_speed_feature: true
+    # uncertainty: [0.1, 0.5, 0.9]    # (future) quantile heads
+
+twin:
+  compute_pi: true
+  target_col: "Power (kW)"
+
+sinks:
+  - kind: console
+  #- kind: csv
+  #  options:
+  #    path: "out/preds_svr.csv"
+  #    # Optional: choose exact columns & their order
+  #    fields: ["ts", "model", "v", "y", "y_hat", "pi"]
+  #    append: true
+
+  - kind: mqtt
+    options:
+      broker: "localhost"
+      port: 1883
+
+  #- kind: websocket
+  #  options: {url: "ws://localhost:8765/dt"}

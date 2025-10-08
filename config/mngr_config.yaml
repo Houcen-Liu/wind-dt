@@ -1,0 +1,25 @@
+data_manager:
+  kind: mqtt
+  options:
+    broker: "localhost"
+    port: 1883
+    speedup: 300000
+    number_turbines: 1
+    scada_output_topic: "Kelmarsh/Turbine/state"
+    prediction_input_topic: "Kelmarsh/ml/predictions"
+    prediction_output_topic: "Kelmarsh/Predictions/current"
+    prediction_result_output_topic: "Kelmarsh/Predictions/results"
+    control_topic: "control/mngr_inputs"
+    data_path: "data/"
+    data_year: "2020"
+    data_items:
+      - "Date and time"
+      - "Wind speed (m/s)"
+      - "Wind direction (°)"
+      - "Energy Export (kWh)"
+      - "Energy Import (kWh)"
+      - "Power (kW)"
+      - "Ambient temperature (converter) (°C)"
+      - "Nacelle ambient temperature (°C)"
+      - "Rotor speed (RPM)"
+      - "Yaw bearing angle (°)"
