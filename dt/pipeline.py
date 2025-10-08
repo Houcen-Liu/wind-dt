@@ -9,6 +9,9 @@ from .models.svr import SVRWrapper
 from .sinks.console import ConsoleSink
 from .sinks.csv import CSVSink
 from .sinks.mqtt_sink import MQTTSink
+from .models.lag_adapter import LagFeatureForecastAdapter, LagSpec
+from .models.factories import lgbm_factory, svr_factory
+
 
 import math
 try:
@@ -70,12 +73,39 @@ class Pipeline:
 
     def _make_model(self, feature_names):
         mcfg = self.cfg["model"]
-        if mcfg["kind"] == "lgbm":
+        kind = mcfg["kind"]
+        if kind == "lag_adapter":
+            opts = mcfg.get("options", {})
+            # rows per hour from your cadence (10-min -> 6)
+            step_per_hour = int(opts.get("step_per_hour", 6))
+            # horizons in hours -> rows
+            H = opts.get("horizons_hours", {"H1":1, "D1":24, "W1":24*7, "M1":24*30})
+            horizons = {k: v*step_per_hour for k,v in H.items()}
+            lag_spec = LagSpec(
+                horizons=horizons,
+                lags=opts.get("lags", {"v":[1,6,12], "y":[1,6,12]}),
+                rolls=opts.get("rolls", {"v":[6,36], "y":[6,36]}),
+                roll_stats=opts.get("roll_stats", ["mean","std"])
+            )
+            base = opts.get("base_model", "lgbm")
+            if base == "lgbm":
+                base_factory = lambda: lgbm_factory(opts.get("lgbm_params"))
+            elif base == "svr":
+                base_factory = lambda: svr_factory(opts.get("svr_params"))
+            else:
+                raise NotImplementedError(f"Unknown base_model: {base}")
+
+            # which raw inputs to keep history for
+            base_inputs = opts.get("base_inputs", ["v","y","wdir_sin","wdir_cos","temp"])
+            model = LagFeatureForecastAdapter(base_factory, lag_spec, base_inputs, step_per_hour)
+            self._model_name = f"{base}_lag"
+            return model
+        elif kind == "lgbm":
             return LGBMRegressorWrapper(
                 monotone_speed_feature=mcfg["options"].get("monotone_speed_feature", True),
                 feature_order=feature_names
             )
-        elif mcfg["kind"] == "svr":
+        elif kind == "svr":
             opts = mcfg.get("options", {})
             return SVRWrapper(
             feature_order=feature_names,
@@ -176,22 +206,36 @@ class Pipeline:
                 except (TypeError, ValueError):
                     y = None
 
-            out = twin.step(x, y)
+            # --- INSERTED PART: generic model handler for lag_adapter or normal ---
+            # 0) update history BEFORE predicting (so current obs is included in lags/rolls)
+            if hasattr(twin.model, "update_after_step"):
+                twin.model.update_after_step(x, y)
+
+            # 1) Predict: dict for lag_adapter; float for single-output models
+            pred = twin.model.predict(x)
+            if isinstance(pred, dict):
+                out = {f"y_hat_{k}": v for k, v in pred.items()}
+            else:
+                out = {"y_hat": float(pred)}
+
+            # 2) Assemble the output record
             out.update({
                 "ts": frame.ts.isoformat(),
                 "v": x.get("v"),
                 "y": y,
                 "model": getattr(self, "_model_name", "unknown"),
             })
+
+            # 3) Write to all sinks
             for s in self.sinks:
                 if isinstance(s, MQTTSink):
-                    s.write(out,"Kelmarsh/ml/predictions1")
+                    s.write(out, "Kelmarsh/ml/predictions1")
                 else:
                     s.write(out)
 
         print("ML Pipeline Done")
         self.running = False
-        stream.close()
+        stream.close() ###delete if not needed
 
     def _run_thread(self):
         loop = asyncio.new_event_loop()

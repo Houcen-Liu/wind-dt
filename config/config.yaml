@@ -40,14 +40,48 @@ processing:
     rated_power: 2050     # kW (Senvion MM92 example)
 
 model:
-  kind: svr
+  kind: lag_adapter
   options:
-    kernel: "rbf"      # rbf | linear | poly | sigmoid
-    C: 75.0            # try 1.0, 10.0, 100.0
-    epsilon: 0.05       # tube width
-    gamma: "auto"     # "scale" | "auto" | float
+    base_model: lgbm          # or "svr"
+    step_per_hour: 6          # 10-min cadence
+    horizons_hours:           # will be multiplied by step_per_hour
+      H1: 1
+      D1: 24
+      W1: 168
+      M1: 720                 # 30 days
+    base_inputs: ["v","y","wdir_sin","wdir_cos","temp"]
+
+    # Historical feature recipe (in rows)
+    lags:
+      v: [1,6,12]             # 10m, 1h, 2h
+      y: [1,6,12]
+    rolls:
+      v: [6,36]               # 1h, 6h windows
+      y: [6,36]
+    roll_stats: ["mean","std"]
+
+    # Model params
+    lgbm_params:
+      n_estimators: 800
+      learning_rate: 0.05
+      max_depth: 6
+      min_child_samples: 80
+
+    svr_params:
+      kernel: "rbf"      # rbf | linear | poly | sigmoid
+      C: 75.0            # try 1.0, 10.0, 100.0
+      epsilon: 0.05       # tube width
+      gamma: "auto"     # "scale" | "auto" | float
+      degree: 3          # only for poly
+      coef0: 0.0         # poly/sigmoid
+  #kind: svr
+  #options:
+    #kernel: "rbf"      # rbf | linear | poly | sigmoid
+    #C: 75.0            # try 1.0, 10.0, 100.0
+    #epsilon: 0.05       # tube width
+    #gamma: "auto"     # "scale" | "auto" | float
     #degree: 3          # only for poly
-    coef0: 0.0         # poly/sigmoid
+    #coef0: 0.0         # poly/sigmoid
   #kind: lgbm
   #options:
     #monotone_speed_feature: true
@@ -58,7 +92,7 @@ twin:
   target_col: "Power (kW)"
 
 sinks:
-  #- kind: console
+  - kind: console
   #- kind: csv
   #  options:
   #    path: "out/preds_svr.csv"
