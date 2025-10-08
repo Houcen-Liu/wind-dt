@@ -37,11 +37,13 @@ class MQTTStream(StreamProvider):
     async def stream(self):
         while self.running:
             topic, payload = await self.queue.get()
-
+            if("diagnostsic" in payload and payload["diagnostsic"]=="Done"):
+                break
             clean_payload = {k: v for k, v in payload.items() if k != "Date and time"}
             yield MeteoFrame(ts=datetime.strptime(payload["Date and time"], '%Y-%m-%d %H:%M:%S'), payload=clean_payload)
 
     def close(self):
+        self.client.loop_stop()
         self.client.disconnect()
         self.running = False
 

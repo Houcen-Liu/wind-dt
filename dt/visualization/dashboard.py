@@ -6,6 +6,7 @@ from dash.dependencies import Input, Output
 import json
 import threading
 import paho.mqtt.client as mqtt
+import sys
 
 from .plots import (
     plot_energy_flow,
@@ -21,7 +22,7 @@ from .plots import (
 
 # -------------------------------
 # MQTT broker information
-TURBINE = "1"
+TURBINE = sys.argv[1]
 BROKER = "localhost"
 PORT = 1883
 TOPICS = [
@@ -134,4 +135,4 @@ def update_graphs(n):
 
 # -------------------------------
 if __name__ == '__main__':
-    app.run(debug=True, port=8050)
+    app.run(debug=True, port=8050+int(TURBINE))

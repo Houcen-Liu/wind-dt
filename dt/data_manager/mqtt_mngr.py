@@ -123,8 +123,9 @@ class MQTTManager():
         try:
             line = next(f)
         except StopIteration:
-            self.running = False
-            return None
+            print("---------- Data Manager Replay Complete ----------")
+            self.running=False
+            return {"diagnostsic":"Done"}
 
         dict_payload = {}
         for idx, val in enumerate(self.data_indexs):
@@ -176,8 +177,9 @@ class MQTTManager():
 
     # Stop the data Manager
     def stop(self):
-        self.running = False
-        self.stop_event.set()
-        self.client.disconnect()
-        self.main_thread.join()
+        if(self.running):
+            self.running = False
+            self.stop_event.set()
+            self.client.disconnect()
+            self.main_thread.join()
 

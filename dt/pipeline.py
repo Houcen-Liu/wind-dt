@@ -1,4 +1,4 @@
-import asyncio, yaml, numpy as np
+import asyncio, yaml, numpy as np, threading
 from .streaming.csv_replay import CSVReplayStream
 from .streaming.mqtt_stream import MQTTStream
 from .processing.features import build_features
@@ -39,6 +39,10 @@ class Pipeline:
 
         if not self.sinks:
             self.sinks = [ConsoleSink()]
+
+        # Thread stuff
+        self.running = False
+        self.main_thread = None
 
     def _make_stream(self):
         scfg = self.cfg["stream"]
@@ -93,6 +97,9 @@ class Pipeline:
         trainer_X, trainer_y, feature_names = [], [], None
         i = 0
         async for frame in stream.stream():
+            if(not self.running):
+                stream.close()
+                return
             # 1) Clean the raw row using config rules
             raw = apply_transforms(frame.payload, self.cfg.get("processing", {}).get("transforms", []))
             if not raw:
@@ -132,11 +139,13 @@ class Pipeline:
                 twin  = PerformanceTwin(model, pcfg["guardrails"])
                 self._model_name = self.cfg["model"]["kind"]  # e.g., "lgbm"
                 break
-        
         stream.close()
         # Rewind: new stream for live replay
         stream_live = self._make_stream()
         async for frame in stream_live.stream():
+            if(not self.running):
+                stream.close()
+                return
             # 1) Clean the raw row using config rules
             raw = apply_transforms(frame.payload, self.cfg.get("processing", {}).get("transforms", []))
             if not raw:
@@ -180,4 +189,26 @@ class Pipeline:
                 else:
                     s.write(out)
 
+        print("ML Pipeline Done")
+        self.running = False
         stream.close()
+
+    def _run_thread(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self.run())
+        except asyncio.CancelledError:
+            print("Pipeline run cancelled")
+        finally:
+            loop.close()
+
+    def start(self):
+        self.running = True
+        self.main_thread = threading.Thread(target=self._run_thread)
+        self.main_thread.start()
+
+    def stop(self):
+        self.running = False
+        if self.main_thread:
+            self.main_thread.join()
