@@ -206,8 +206,18 @@ class LagFeatureForecastAdapter(ModelWrapper):
 
         # Otherwise use historical lag/rolling features for multi‑horizon forecasts
         feats = self._make_features_from_history()
-        # If we lack sufficient history or no models have been trained, return empty
-        if not feats or not self.models:
+        # If no multi‑horizon models have been trained, return empty
+        if not self.models:
             return {}
+        # If there are no lag/roll features available yet (e.g. at the very
+        # beginning of streaming), fall back to using the raw feature vector
+        if not feats:
+            # Ensure feature_order is known; if not, infer from x_current
+            if self.feature_order is None:
+                self.feature_order = sorted(list(x_current.keys()))
+            X_df = pd.DataFrame([[x_current.get(f, 0.0) for f in self.feature_order]],
+                                columns=self.feature_order)
+            return {hz: float(m.predict(X_df)[0]) for hz, m in self.models.items()}
+        # Otherwise use the lag/roll feature DataFrame
         Xdf = self._features_dataframe(feats)
         return {hz: float(m.predict(Xdf)[0]) for hz, m in self.models.items()}
