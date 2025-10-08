@@ -76,16 +76,16 @@ class Pipeline:
         kind = mcfg["kind"]
         if kind == "lag_adapter":
             opts = mcfg.get("options", {})
-            # rows per hour from your cadence (10-min -> 6)
+            # rows per hour from your cadence (10‑min -> 6)
             step_per_hour = int(opts.get("step_per_hour", 6))
             # horizons in hours -> rows
-            H = opts.get("horizons_hours", {"H1":1, "D1":24, "W1":24*7, "M1":24*30})
-            horizons = {k: v*step_per_hour for k,v in H.items()}
+            H = opts.get("horizons_hours", {"H1": 1, "D1": 24, "W1": 24 * 7, "M1": 24 * 30})
+            horizons = {k: v * step_per_hour for k, v in H.items()}
             lag_spec = LagSpec(
                 horizons=horizons,
-                lags=opts.get("lags", {"v":[1,6,12], "y":[1,6,12]}),
-                rolls=opts.get("rolls", {"v":[6,36], "y":[6,36]}),
-                roll_stats=opts.get("roll_stats", ["mean","std"])
+                lags=opts.get("lags", {"v": [1, 6, 12], "y": [1, 6, 12]}),
+                rolls=opts.get("rolls", {"v": [6, 36], "y": [6, 36]}),
+                roll_stats=opts.get("roll_stats", ["mean", "std"]),
             )
             base = opts.get("base_model", "lgbm")
             if base == "lgbm":
@@ -96,8 +96,13 @@ class Pipeline:
                 raise NotImplementedError(f"Unknown base_model: {base}")
 
             # which raw inputs to keep history for
-            base_inputs = opts.get("base_inputs", ["v","y","wdir_sin","wdir_cos","temp"])
+            base_inputs = opts.get("base_inputs", ["v", "y", "wdir_sin", "wdir_cos", "temp"])
             model = LagFeatureForecastAdapter(base_factory, lag_spec, base_inputs, step_per_hour)
+            # When using the lag adapter in single‑target contexts, provide the
+            # feature order so the adapter can construct DataFrames for the base
+            # model.  In multi‑horizon mode this will be overwritten on first
+            # call to `fit()` using the training DataFrame columns.
+            model.feature_order = feature_names
             self._model_name = f"{base}_lag"
             return model
         elif kind == "lgbm":
@@ -127,7 +132,7 @@ class Pipeline:
         trainer_X, trainer_y, feature_names = [], [], None
         i = 0
         async for frame in stream.stream():
-            if(not self.running):
+            if not self.running:
                 stream.close()
                 return
             # 1) Clean the raw row using config rules
@@ -158,23 +163,81 @@ class Pipeline:
                 continue
             x["v"] = v  # ensure Python float
 
+            # Initialize feature_names on first valid row
             if feature_names is None:
                 feature_names = sorted(list(x.keys()))
-            trainer_X.append([x.get(f,0.0) for f in feature_names])
+            # Append feature vector and target to trainer lists
+            trainer_X.append([x.get(f, 0.0) for f in feature_names])
             trainer_y.append(y)
             i += 1
-            if i >= 5000:    # warmup window
+            # After warmup window, construct and fit the model
+            if i >= 5000:
+                # Determine which model to build based on config.  We only need
+                # special handling for the lag adapter; other models can train on
+                # the raw feature matrix and target vector.
                 model = self._make_model(feature_names)
-                model.fit(trainer_X, trainer_y)
-                twin  = PerformanceTwin(model, pcfg["guardrails"])
-                self._model_name = self.cfg["model"]["kind"]  # e.g., "lgbm"
+                # Use lag/rolling features when training the LagFeatureForecastAdapter.
+                # Import here to avoid circular imports at module load time.
+                from .models.lag_adapter import LagFeatureForecastAdapter
+                if isinstance(model, LagFeatureForecastAdapter):
+                    import pandas as pd
+                    # Build lag/rolling features by replaying the warm‑up data
+                    # through a fresh adapter.  This ensures the internal ring
+                    # buffers start empty for streaming.
+                    lag_model = self._make_model(feature_names)
+                    # Lists to collect feature dicts and the index in trainer_y
+                    feat_rows = []
+                    feat_indices = []
+                    # Iterate through the collected warmup rows.  For each, update
+                    # the adapter's history.  When sufficient history exists to
+                    # compute lag/rolling features, append those features and the
+                    # current index (pointing to the current y value) to the lists.
+                    for idx, (row_feats, y_val) in enumerate(zip(trainer_X, trainer_y)):
+                        # Reconstruct the feature dict keyed by feature_names
+                        x_dict = {feature_names[j]: row_feats[j] for j in range(len(feature_names))}
+                        # Provide the actual target so the 'y' history is updated correctly
+                        lag_model.update_after_step(x_dict, y_val)
+                        feats = lag_model._make_features_from_history()
+                        if feats:
+                            feat_rows.append(feats)
+                            feat_indices.append(idx)
+                    # Convert the list of feature dicts into a DataFrame
+                    if feat_rows:
+                        df = pd.DataFrame(feat_rows)
+                        # Prepare mapping of horizons to column names
+                        y_cols = {}
+                        for hz, hlen in lag_model.lag_spec.horizons.items():
+                            col_name = f"y_{hz}"
+                            y_cols[hz] = col_name
+                            col_values = []
+                            for idx in feat_indices:
+                                target_idx = idx + hlen
+                                # Use point target at horizon distance; None if not available
+                                col_values.append(trainer_y[target_idx] if target_idx < len(trainer_y) else None)
+                            df[col_name] = col_values
+                        # Reset the feature order so the adapter infers it from the lag/roll feature columns
+                        lag_model.feature_order = None
+                        # Fit the new lag model on the lag features and horizon targets
+                        lag_model.fit(df, y_cols)
+                        model = lag_model
+                else:
+                    # Standard single‑horizon fit on raw features and target vector
+                    model.fit(trainer_X, trainer_y)
+                # Construct the performance twin with the trained model
+                twin = PerformanceTwin(model, pcfg["guardrails"])
+                # Save the model kind for logging/output
+                self._model_name = self.cfg["model"]["kind"]
                 break
         stream.close()
         # Rewind: new stream for live replay
         stream_live = self._make_stream()
         async for frame in stream_live.stream():
             if(not self.running):
-                stream.close()
+                # Close the live stream when stopping early
+                try:
+                    stream_live.close()
+                except Exception:
+                    pass
                 return
             # 1) Clean the raw row using config rules
             raw = apply_transforms(frame.payload, self.cfg.get("processing", {}).get("transforms", []))
@@ -234,8 +297,10 @@ class Pipeline:
                     s.write(out)
 
         print("ML Pipeline Done")
+        # Signal completion
         self.running = False
-        stream.close() ###delete if not needed
+        # Close the live stream; the initial warmup stream was closed
+        stream_live.close()
 
     def _run_thread(self):
         loop = asyncio.new_event_loop()
