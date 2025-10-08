@@ -46,6 +46,6 @@ class MQTTStream(StreamProvider):
         self.running = False
         self.client.loop_stop()
         self.client.disconnect()
-        if not self.loop.is_closed():
+        if self.loop.is_closed(): # "not" commented out
             self.loop.call_soon_threadsafe(self.loop.stop)
 

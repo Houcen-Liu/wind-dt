@@ -171,7 +171,7 @@ class Pipeline:
             trainer_y.append(y)
             i += 1
             # After warmup window, construct and fit the model
-            if i >= 5000:
+            if i >= 2000:
                 # Determine which model to build based on config.  We only need
                 # special handling for the lag adapter; other models can train on
                 # the raw feature matrix and target vector.

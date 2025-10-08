@@ -20,7 +20,7 @@ stream:
   #  comment: "#" # <-- skip the description block
 
 pipeline:
-  warmup_size: 5000
+  warmup_size: 2000
 
 processing:
   transforms: 
