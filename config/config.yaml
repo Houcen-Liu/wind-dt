@@ -4,22 +4,20 @@ stream:
     broker: "localhost"         # MQTT broker address
     port: 1883                  # MQTT broker port
     topics:
-      - "Kelmarsh/Turbine1/Data"        # raw SCADA data
-      - "Kelmarsh/Turbine1/Prediction"  # model predictions
-      - "Kelmarsh/Turbine1/Results"     # predicted vs actual results
+      - "Kelmarsh/Turbine/state1"
 
-  kind: csv_replay
-  options:
-    path: "./data/Kelmarsh_SCADA_2020_3086/Turbine_Data_Kelmarsh_1_2020-01-01_-_2021-01-01_228.csv"
-    timestamp_col: "Date and time"
-    speedup: 300000            
-    loop: true
-    time_col_tz: "UTC"
-    sep: ","           
-    encoding: "utf-8"   
-    on_bad_lines: "warn"  # "skip" to drop malformed lines
-    header_key: "Date and time"        
-    comment: "#" # <-- skip the description block
+  #kind: csv_replay
+  #options:
+  #  path: "./data/Kelmarsh_SCADA_2020_3086/Turbine_Data_Kelmarsh_1_2020-01-01_-_2021-01-01_228.csv"
+  #  timestamp_col: "Date and time"
+  #  speedup: 300000            
+  #  loop: true
+  #  time_col_tz: "UTC"
+  #  sep: ","           
+  #  encoding: "utf-8"   
+  #  on_bad_lines: "warn"  # "skip" to drop malformed lines
+  #  header_key: "Date and time"        
+  #  comment: "#" # <-- skip the description block
 
 pipeline:
   warmup_size: 5000
@@ -60,18 +58,18 @@ twin:
   target_col: "Power (kW)"
 
 sinks:
-  - kind: console
-  - kind: csv
-    options:
-      path: "out/preds_svr.csv"
-      # Optional: choose exact columns & their order
-      fields: ["ts", "model", "v", "y", "y_hat", "pi"]
-      append: true
-
-  #- kind: mqtt
+  #- kind: console
+  #- kind: csv
   #  options:
-  #    broker: "localhost"
-  #    port: 1883
-  #    topics:
+  #    path: "out/preds_svr.csv"
+  #    # Optional: choose exact columns & their order
+  #    fields: ["ts", "model", "v", "y", "y_hat", "pi"]
+  #    append: true
+
+  - kind: mqtt
+    options:
+      broker: "localhost"
+      port: 1883
+
   #- kind: websocket
   #  options: {url: "ws://localhost:8765/dt"}

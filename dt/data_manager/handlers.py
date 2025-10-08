@@ -36,8 +36,20 @@ class predictionHandler:
         ret = {}
         hour_ts = ts - timedelta(hours=1)
         actual_power = float(data["Power (kW)"])
+        
+        # Set optional values to NaN
+        ret["pred_day"] = float('nan')
+        ret["pred_week"] = float('nan')
+        ret["pred_month"] = float('nan')
+
+        ret["hour_error_average"] = float('nan')
+        ret["day_error_average"] = float('nan')
+        ret["week_error_average"] = float('nan')
+        ret["month_error_average"] = float('nan')
+
+
         if hour_ts in self.prediction_dict:
-            ret["time"]=ts.strftime('%Y-%m-%d %H:%M:%S')
+            ret["Date and time"]=ts.strftime('%Y-%m-%d %H:%M:%S')
             ret["actual_power"]=actual_power
 
             self.hour_count +=1

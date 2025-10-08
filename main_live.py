@@ -1,15 +1,19 @@
-# main_live.py
-# This script runs the full live pipeline: reading MQTT data, processing it,
-# building features, applying ML model, and sending results to sinks (console, CSV, MQTT).
-
 import asyncio
-from dt.pipeline import Pipeline# --------------------------
-# Entry point for live run
-# --------------------------
-if __name__ == "__main__":
-    # Create the pipeline using the live config
-    pipeline = Pipeline(cfg_path="config/config.yaml")
+import time
+from dt.pipeline import Pipeline
+from dt.data_manager.mqtt_mngr import MQTTManager
 
-    # Run the pipeline in asyncio event loop
-    # It will continuously listen to MQTT topics and process incoming SCADA data
-    asyncio.run(pipeline.run())
+if __name__ == "__main__":
+    ml_pl = Pipeline("config/config.yaml")
+    mqttMngr = MQTTManager("config/mngr_config.yaml")
+    mqttMngr.start()
+
+    asyncio.run(ml_pl.run())
+    
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Stopping ... ")
+        mqttMngr.stop()
+    

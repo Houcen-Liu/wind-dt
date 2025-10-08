@@ -18,7 +18,7 @@ except Exception:
 
 class Pipeline:
     def __init__(self, cfg_path="config/config.yaml"):
-        with open(cfg_path, 'r') as f:
+        with open(cfg_path, 'r',encoding="utf-8") as f:
             self.cfg = yaml.safe_load(f)
         self.sinks = []
         for sk in self.cfg.get("sinks", []):
@@ -176,7 +176,7 @@ class Pipeline:
             })
             for s in self.sinks:
                 if isinstance(s, MQTTSink):
-                    s.write(out,"ml/predictions1")
+                    s.write(out,"Kelmarsh/ml/predictions1")
                 else:
                     s.write(out)
 

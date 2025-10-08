@@ -11,7 +11,7 @@ from datetime import datetime
 class MQTTManager():
     def __init__(self,cfg_path) :
         # Get YAML Params
-        with open(cfg_path, 'r') as f:
+        with open(cfg_path, 'r',encoding="utf-8") as f:
             cfg = yaml.safe_load(f)
         pcfg = cfg["data_manager"]["options"]
         self.broker = pcfg["broker"]
@@ -52,7 +52,7 @@ class MQTTManager():
         for i in range(1,self.number_turbines+1):
             # Files
             file_name = data_path+"Turbine_Data_Kelmarsh_"+str(i)+"_"+str(data_year)+"-01-01_-_"+str(int(data_year)+1)+"-01-01_"+str(227+i)+".csv"
-            self.data_files.append(csv.reader(open(file_name)))
+            self.data_files.append(csv.reader(open(file_name,encoding="utf-8")))
 
             # Outputs
             self.turbine_topics.append(scada_output_topic+str(i))
@@ -94,6 +94,7 @@ class MQTTManager():
             # Add prediction to handler
             self.predictionHandlers[0].add_prediction(datetime.strptime(data["ts"], '%Y-%m-%dT%H:%M:%S'),data)
             # Send out prediction
+            #print(data)
             self.client.publish(self.cur_pred_topics[0], payload)
         
         # Handle Control Inputs
@@ -119,7 +120,12 @@ class MQTTManager():
             
     # Fetch line from CSV file
     def _fetch_line(self, f,turbine_i):
-        line = next(f)   
+        try:
+            line = next(f)
+        except StopIteration:
+            self.running = False
+            return None
+
         dict_payload = {}
         for idx, val in enumerate(self.data_indexs):
             v_val = self._validate_val(line[val])
@@ -151,7 +157,7 @@ class MQTTManager():
                 
                 # Output results of previous predictions
                 if pred_data is not None:
-                    print(pred_data)
+                    #print(pred_data)
                     res_payload_json = json.dumps(pred_data)
                     self.client.publish(self.pred_result_topics[i], res_payload_json)
             

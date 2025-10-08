@@ -5,10 +5,10 @@ data_manager:
     port: 1883
     speedup: 300000
     number_turbines: 1
-    scada_output_topic: "turbine/state"
-    prediction_input_topic: "ml/predictions"
-    prediction_output_topic: "predictions/current"
-    prediction_result_output_topic: "predictions/results"
+    scada_output_topic: "Kelmarsh/Turbine/state"
+    prediction_input_topic: "Kelmarsh/ml/predictions"
+    prediction_output_topic: "Kelmarsh/Predictions/current"
+    prediction_result_output_topic: "Kelmarsh/Predictions/results"
     control_topic: "control/mngr_inputs"
     data_path: "data/"
     data_year: "2020"
@@ -20,5 +20,6 @@ data_manager:
       - "Energy Import (kWh)"
       - "Power (kW)"
       - "Ambient temperature (converter) (°C)"
+      - "Nacelle ambient temperature (°C)"
       - "Rotor speed (RPM)"
       - "Yaw bearing angle (°)"
