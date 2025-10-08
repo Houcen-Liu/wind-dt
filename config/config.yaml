@@ -20,7 +20,7 @@ stream:
   #  comment: "#" # <-- skip the description block
 
 pipeline:
-  warmup_size: 2000
+  warmup_size: 5000
 
 processing:
   transforms: 
@@ -93,12 +93,12 @@ twin:
 
 sinks:
   - kind: console
-  #- kind: csv
-  #  options:
-  #    path: "out/preds_lag.csv"
-  #    # Optional: choose exact columns & their order
-  #    fields: ["ts", "model", "v", "y", "y_hat_H1", "y_hat_D1", "y_hat_W1", "y_hat_M1", "pi"]
-  #    append: true
+  - kind: csv
+    options:
+      path: "out/preds_lag.csv"
+      # Optional: choose exact columns & their order
+      fields: ["ts", "model", "v", "y", "y_hat_H1", "y_hat_D1", "y_hat_W1", "y_hat_M1"]
+      append: true
 
   - kind: mqtt
     options:

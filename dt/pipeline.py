@@ -171,7 +171,7 @@ class Pipeline:
             trainer_y.append(y)
             i += 1
             # After warmup window, construct and fit the model
-            if i >= 2000:
+            if i >= 5000:
                 # Determine which model to build based on config.  We only need
                 # special handling for the lag adapter; other models can train on
                 # the raw feature matrix and target vector.
@@ -276,8 +276,19 @@ class Pipeline:
 
             # 1) Predict: dict for lag_adapter; float for single-output models
             pred = twin.model.predict(x)
+            # Compose the output predictions dictionary.  If the model is a lag
+            # adapter, ensure that all defined horizons have a corresponding
+            # prediction key (fill missing horizons with None).  Otherwise,
+            # return a single y_hat value.
+            from .models.lag_adapter import LagFeatureForecastAdapter
             if isinstance(pred, dict):
-                out = {f"y_hat_{k}": v for k, v in pred.items()}
+                # start with the predictions we got
+                out = {f"y_hat_{hz}": val for hz, val in pred.items()}
+                # fill in horizons that were not predicted (no model trained yet)
+                if isinstance(twin.model, LagFeatureForecastAdapter):
+                    for hz in twin.model.lag_spec.horizons.keys():
+                        key = f"y_hat_{hz}"
+                        out.setdefault(key, None)
             else:
                 out = {"y_hat": float(pred)}
 
