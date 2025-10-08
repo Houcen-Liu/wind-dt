@@ -13,3 +13,5 @@ data/*
 out/
 #*.csv
   .DS_Store
+
+.vscode/
