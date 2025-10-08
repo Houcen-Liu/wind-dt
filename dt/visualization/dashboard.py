@@ -2,7 +2,7 @@
 
 import dash
 from dash import html, dcc
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 import json
 import threading
 import paho.mqtt.client as mqtt
@@ -13,7 +13,7 @@ from .plots import (
     plot_environmental_conditions,
     plot_wind_conditions,
     plot_turbine_status,
-    plot_power_vs_temperature,
+    plot_power_vs_windspeed,
     plot_predicted_vs_actual_power,
     table_latest_turbine_data,
     table_errors,
@@ -37,10 +37,10 @@ app = dash.Dash(__name__)
 app.layout = html.Div([
     html.H1("Wind Turbine Dashboard"),
     
-    dcc.Graph(id='energy-flow'),
-    dcc.Graph(id='environmental-conditions'),
     dcc.Graph(id='wind-conditions'),
     dcc.Graph(id='turbine-status'),
+    dcc.Graph(id='energy-flow'),
+    dcc.Graph(id='environmental-conditions'),
     dcc.Graph(id='power-vs-temp'),
     dcc.Graph(id='predicted-vs-actual'),
 
@@ -49,7 +49,7 @@ app.layout = html.Div([
     dcc.Graph(id='predicitons-table'),
 
 
-    dcc.Interval(id='interval-component', interval=5000, n_intervals=0)  # Interval component triggers callback every 5 seconds
+    dcc.Interval(id='interval-component', interval=1000, n_intervals=0)  # Interval component triggers callback every 5 seconds
 ])
 
 # -------------------------------
@@ -102,8 +102,13 @@ threading.Thread(target=mqtt_client.loop_forever, daemon=True).start()
     Output('predicitons-table', 'figure'), 
 
     Input('interval-component', 'n_intervals'),
+
+    State('turbine-status', 'relayoutData'),
+    State('turbine-status', 'figure'),
+    State('predicted-vs-actual', 'relayoutData'),
+    State('predicted-vs-actual', 'figure')
 )
-def update_graphs(n):
+def update_graphs(n,turbine_relayout, turbine_prev_fig,pred_v_actual_relayout, pred_v_actual_prev_fig):
     df_data = data_store["data"]
     df_pred = data_store["prediction"]
     df_results = data_store["results"]
@@ -125,12 +130,44 @@ def update_graphs(n):
     fig_env = plot_environmental_conditions(df_data_copy)
     fig_wind = plot_wind_conditions(df_data_copy)
     fig_status = plot_turbine_status(df_data_copy)
-    fig_power_temp = plot_power_vs_temperature(df_data_copy)
+    fig_power_temp = plot_power_vs_windspeed(df_data_copy)
     fig_pred_actual = plot_predicted_vs_actual_power(df_results_copy)
     fig_latest_trubine_table = table_latest_turbine_data(df_data_sample)
     fig_latest_error_table = table_errors(df_error_sample)
     fig_latest_pred_table = table_prediction(None)
 
+    # Preserve User selected layouts
+    if turbine_relayout:
+        x0 = turbine_relayout.get("xaxis.range[0]")
+        x1 = turbine_relayout.get("xaxis.range[1]")
+        y0 = turbine_relayout.get("yaxis.range[0]")
+        y1 = turbine_relayout.get("yaxis.range[1]")
+        if x0 and x1:
+            fig_status.update_xaxes(range=[x0, x1])
+        if y0 and y1:
+            fig_status.update_yaxes(range=[y0, y1])
+    if pred_v_actual_relayout:
+        x0 = pred_v_actual_relayout.get("xaxis.range[0]")
+        x1 = pred_v_actual_relayout.get("xaxis.range[1]")
+        y0 = pred_v_actual_relayout.get("yaxis.range[0]")
+        y1 = pred_v_actual_relayout.get("yaxis.range[1]")
+        if x0 and x1:
+            fig_pred_actual.update_xaxes(range=[x0, x1])
+        if y0 and y1:
+            fig_pred_actual.update_yaxes(range=[y0, y1])
+
+    # Preserve Lines that were select/hidden
+    if turbine_prev_fig and "data" in turbine_prev_fig:
+        for i, trace in enumerate(fig_status.data):
+            if i < len(turbine_prev_fig["data"]):
+                trace.visible = turbine_prev_fig["data"][i].get("visible", True)
+
+    if pred_v_actual_prev_fig and "data" in pred_v_actual_prev_fig:
+        for i, trace in enumerate(fig_pred_actual.data):
+            if i < len(pred_v_actual_prev_fig["data"]):
+                trace.visible = pred_v_actual_prev_fig["data"][i].get("visible", True)
+
+                
     return fig_energy, fig_env, fig_wind, fig_status, fig_power_temp, fig_pred_actual,fig_latest_trubine_table,fig_latest_error_table,fig_latest_pred_table
 
 # -------------------------------

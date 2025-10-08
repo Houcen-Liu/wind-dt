@@ -15,15 +15,51 @@ def plot_energy_flow(df_data):
     if "Energy Export (kWh)" not in df.columns or "Energy Import (kWh)" not in df.columns:
         return go.Figure()
 
-    fig = go.Figure(go.Sankey(
-        node=dict(label=["Export", "Import"]),
-        link=dict(
-            source=[0, 1],
-            target=[1, 0],
-            value=[df["Energy Export (kWh)"].sum(), df["Energy Export (kWh)"].sum()]
-        )
+    export_sum = df["Energy Export (kWh)"].sum()
+    import_sum = df["Energy Import (kWh)"].sum()
+
+    total = export_sum + import_sum
+    if total == 0:
+        return go.Figure()
+
+    export_ratio = export_sum / total
+    import_ratio = import_sum / total
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        y=["Energy Flow"],
+        x=[export_ratio],
+        name="Export",
+        orientation="h",
+        marker_color="seagreen",
+        hovertemplate="Export: %{x:.2%}<extra></extra>"
     ))
-    fig.update_layout(title_text="Energy Flow", font_size=12)
+
+    fig.add_trace(go.Bar(
+        y=["Energy Flow"],
+        x=[-import_ratio], 
+        name="Import",
+        orientation="h",
+        marker_color="tomato",
+        hovertemplate="Import: %{x:.2%}<extra></extra>"
+    ))
+
+    fig.update_layout(
+        title="Import vs Export",
+        barmode="relative",
+        xaxis=dict(
+            showticklabels=False,
+            range=[-1, 1],
+            zeroline=True,
+            zerolinewidth=2,
+            zerolinecolor="black"
+        ),
+        yaxis=dict(showticklabels=False),
+        showlegend=True,
+        height=300
+    )
+
     return fig
 
 # -------------------------------
@@ -32,10 +68,10 @@ def plot_environmental_conditions(df_data):
     if not df_data:
         return px.line()
     df = pd.DataFrame(df_data)
-    if "Nacelle ambient temperature (°C)" not in df.columns or "Date and time" not in df.columns:
+    if "Ambient temperature (converter) (°C)" not in df.columns or "Date and time" not in df.columns:
         return px.line()
     df["Date and time"] = pd.to_datetime(df["Date and time"])
-    fig = px.line(df, x="Date and time", y="Nacelle ambient temperature (°C)", title="Ambient Temperature")
+    fig = px.line(df, x="Date and time", y="Ambient temperature (converter) (°C)", title="Ambient Temperature")
     return fig
 
 # -------------------------------
@@ -64,15 +100,15 @@ def plot_turbine_status(df_data):
     return fig
 
 # -------------------------------
-# Power vs Temperature (Scatter + Trendline)
-def plot_power_vs_temperature(df_data):
+# Power vs windspeed (Scatter + Trendline)
+def plot_power_vs_windspeed(df_data):
     if not df_data:
         return px.scatter()
     df = pd.DataFrame(df_data)
-    if not all(col in df.columns for col in ["Power (kW)", "Nacelle ambient temperature (°C)"]):
+    if not all(col in df.columns for col in ["Power (kW)", "Wind speed (m/s)"]):
         return px.scatter()
-    fig = px.scatter(df, x="Nacelle ambient temperature (°C)", y="Power (kW)", trendline="ols",
-                     title="Power vs Temperature")
+    fig = px.scatter(df, x="Wind speed (m/s)", y="Power (kW)", trendline="ols",
+                     title="Power vs Wind Speed")
     return fig
 
 # -------------------------------

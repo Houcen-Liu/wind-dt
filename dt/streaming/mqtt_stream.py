@@ -43,7 +43,9 @@ class MQTTStream(StreamProvider):
             yield MeteoFrame(ts=datetime.strptime(payload["Date and time"], '%Y-%m-%d %H:%M:%S'), payload=clean_payload)
 
     def close(self):
+        self.running = False
         self.client.loop_stop()
         self.client.disconnect()
-        self.running = False
+        if not self.loop.is_closed():
+            self.loop.call_soon_threadsafe(self.loop.stop)
 
