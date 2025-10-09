@@ -7,6 +7,7 @@ import json
 import threading
 import paho.mqtt.client as mqtt
 import sys
+import yaml
 
 from .plots import (
     plot_energy_flow,
@@ -19,7 +20,12 @@ from .plots import (
     table_errors,
     table_prediction
 )
+# Load speedup value from config
+with open("config/mngr_config.yaml", "r") as f:
+    config = yaml.safe_load(f)
 
+speedup_value = config["data_manager"]["options"]["speedup"]
+interval_value = config["data_manager"]["options"].get("interval_ms", 1000)  # default 1000 ms
 # -------------------------------
 # MQTT broker information
 TURBINE = sys.argv[1]
@@ -36,6 +42,46 @@ TOPICS = [
 app = dash.Dash(__name__)
 app.layout = html.Div([
     html.H1("Wind Turbine Dashboard"),
+
+    
+     # Speed / Interval Slider
+    html.Div([
+        html.Label("Simulation Speed (ms interval)", style={
+            'fontSize': '20px',
+            'fontWeight': 'bold',
+            'color': '#003366',
+            'display': 'block',
+            'marginBottom': '10px'
+        }),
+
+        dcc.Slider(
+            id='speed-slider',
+            min=100,      # minimum interval 100 ms
+            max=5000,     # maximum interval 5000 ms
+            step=100,
+            value= interval_value,
+            marks={100: '100ms', 1000: '1s', 5000: '5s'},
+            tooltip={"placement": "bottom", "always_visible": True},
+            updatemode='drag'
+        ),
+
+        html.Div(id='speed-display', style={
+            'marginTop': '15px',
+            'fontSize': '18px',
+            'fontWeight': '500',
+            'color': '#1F618D'
+        })
+    ], style={
+        'width': '70%',
+        'margin': 'auto',
+        'padding': '20px',
+        'borderRadius': '10px',
+        'backgroundColor': '#F7FBFF',
+        'boxShadow': '0px 2px 6px rgba(0,0,0,0.1)',
+        'textAlign': 'center'
+    }),
+    
+    html.Br(),
     
     dcc.Graph(id='wind-conditions'),
     dcc.Graph(id='turbine-status'),
@@ -51,8 +97,7 @@ app.layout = html.Div([
 
     dcc.Interval(id='interval-component', interval=1000, n_intervals=0)  # Interval component triggers callback every 5 seconds
 ])
-
-# -------------------------------
+#------------------------------------------
 # Global data store (in-memory)
 data_store = {
     "data": [],
@@ -89,6 +134,32 @@ mqtt_client.connect(BROKER, PORT, 60)
 threading.Thread(target=mqtt_client.loop_forever, daemon=True).start()
 
 # -------------------------------
+
+
+
+# -------------------------------
+# Interval slider callback
+@app.callback(
+    Output('speed-display', 'children'),
+    Output('interval-component', 'interval'),
+    Input('speed-slider', 'value')
+)
+def update_interval(value):
+    global interval_value
+    interval_value = value
+
+    # Update YAML
+    with open("config/mngr_config.yaml", "r") as f:
+        config = yaml.safe_load(f)
+    config["data_manager"]["options"]["interval_ms"] = value
+    with open("config/mngr_config.yaml", "w") as f:
+        yaml.safe_dump(config, f)
+
+    # Optionally send control message
+    mqtt_client.publish("Kelmarsh/Control/Speedup", json.dumps({"interval_ms": value}))
+
+    return f"Current interval: {value} ms", value
+#-----------------------------------------------------------------------------------
 # Dash callbacks
 @app.callback(
     Output('energy-flow', 'figure'),
