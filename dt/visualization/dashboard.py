@@ -7,7 +7,6 @@ import json
 import threading
 import paho.mqtt.client as mqtt
 import sys
-import yaml
 
 from .plots import (
     plot_energy_flow,
@@ -20,12 +19,7 @@ from .plots import (
     table_errors,
     table_prediction
 )
-# Load speedup value from config
-with open("config/mngr_config.yaml", "r") as f:
-    config = yaml.safe_load(f)
-
-speedup_value = config["data_manager"]["options"]["speedup"]
-interval_value = config["data_manager"]["options"].get("interval_ms", 1000)  # default 1000 ms
+current_speedup = 6000
 # -------------------------------
 # MQTT broker information
 TURBINE = sys.argv[1]
@@ -46,7 +40,7 @@ app.layout = html.Div([
     
      # Speed / Interval Slider
     html.Div([
-        html.Label("Simulation Speed (ms interval)", style={
+        html.Label("Simulation Speedup", style={
             'fontSize': '20px',
             'fontWeight': 'bold',
             'color': '#003366',
@@ -56,11 +50,11 @@ app.layout = html.Div([
 
         dcc.Slider(
             id='speed-slider',
-            min=100,      # minimum interval 100 ms
-            max=5000,     # maximum interval 5000 ms
+            min=1,           # minimum interval 10 min
+            max=60000,      # maximum interval 1 ms
             step=100,
-            value= interval_value,
-            marks={100: '100ms', 1000: '1s', 5000: '5s'},
+            value= current_speedup,
+            marks={1: '10 min', 6000: '100ms', 30000: '20ms',60000: '10ms'},
             tooltip={"placement": "bottom", "always_visible": True},
             updatemode='drag'
         ),
@@ -88,9 +82,9 @@ app.layout = html.Div([
     dcc.Graph(id='energy-flow'),
     dcc.Graph(id='environmental-conditions'),
     dcc.Graph(id='power-vs-temp'),
-    dcc.Graph(id='predicted-vs-actual'),
-
     dcc.Graph(id='latest-turbine-table'),
+
+    dcc.Graph(id='predicted-vs-actual'),
     dcc.Graph(id='average-error-table'),
     dcc.Graph(id='predicitons-table'),
 
@@ -141,24 +135,14 @@ threading.Thread(target=mqtt_client.loop_forever, daemon=True).start()
 # Interval slider callback
 @app.callback(
     Output('speed-display', 'children'),
-    Output('interval-component', 'interval'),
     Input('speed-slider', 'value')
 )
 def update_interval(value):
-    global interval_value
-    interval_value = value
+    global current_speedup
+    current_speedup = value
+    mqtt_client.publish("control/mngr_inputs", json.dumps({"speedup": value}))
+    return f"Interval (ms): {round((600/value)*1000)}"
 
-    # Update YAML
-    with open("config/mngr_config.yaml", "r") as f:
-        config = yaml.safe_load(f)
-    config["data_manager"]["options"]["interval_ms"] = value
-    with open("config/mngr_config.yaml", "w") as f:
-        yaml.safe_dump(config, f)
-
-    # Optionally send control message
-    mqtt_client.publish("Kelmarsh/Control/Speedup", json.dumps({"interval_ms": value}))
-
-    return f"Current interval: {value} ms", value
 #-----------------------------------------------------------------------------------
 # Dash callbacks
 @app.callback(
@@ -205,7 +189,7 @@ def update_graphs(n,turbine_relayout, turbine_prev_fig,pred_v_actual_relayout, p
     fig_pred_actual = plot_predicted_vs_actual_power(df_results_copy)
     fig_latest_trubine_table = table_latest_turbine_data(df_data_sample)
     fig_latest_error_table = table_errors(df_error_sample)
-    fig_latest_pred_table = table_prediction(None)
+    fig_latest_pred_table = table_prediction(df_pred_sample)
 
     # Preserve User selected layouts
     if turbine_relayout:

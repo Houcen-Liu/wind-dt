@@ -92,7 +92,7 @@ class MQTTManager():
         # Handle Predictions inputs
         if(msg.topic in self.pred_input_topics):
             # Add prediction to handler
-            self.predictionHandlers[0].add_prediction(datetime.strptime(data["ts"], '%Y-%m-%dT%H:%M:%S'),data)
+            self.predictionHandlers[self.pred_input_topics.index(msg.topic)].add_prediction(datetime.strptime(data["ts"], '%Y-%m-%dT%H:%M:%S'),data)
             # Send out prediction
             #print(data)
             self.client.publish(self.cur_pred_topics[0], payload)

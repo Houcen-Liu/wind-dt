@@ -235,10 +235,10 @@ def table_prediction(latest_sample: dict):
         return go.Figure()
     
     keys_to_show = [
-        "hour",
-        "day",
-        "week",
-        "month"
+        "y_hat_H1",
+        "y_hat_D1",
+        "y_hat_W1",
+        "y_hat_M1"
     ]
 
     filtered_data = {k: latest_sample[k] for k in keys_to_show}
@@ -261,5 +261,5 @@ def table_prediction(latest_sample: dict):
         ]
     )
 
-    fig.update_layout(title="Prediction Average Errors (MAE)", height=500)
+    fig.update_layout(title="Predictions", height=500)
     return fig

@@ -66,6 +66,7 @@ model:
       learning_rate: 0.05
       max_depth: 6
       min_child_samples: 80
+      verbose: -1
 
     svr_params:
       kernel: "rbf"      # rbf | linear | poly | sigmoid
@@ -92,13 +93,13 @@ twin:
   target_col: "Power (kW)"
 
 sinks:
-  - kind: console
-  - kind: csv
-    options:
-      path: "out/preds_lag.csv"
-      # Optional: choose exact columns & their order
-      fields: ["ts", "model", "v", "y", "y_hat_H1", "y_hat_D1", "y_hat_W1", "y_hat_M1"]
-      append: true
+  #- kind: console
+  #- kind: csv
+  #  options:
+  #    path: "out/preds_lag.csv"
+  #    # Optional: choose exact columns & their order
+  #    fields: ["ts", "model", "v", "y", "y_hat_H1", "y_hat_D1", "y_hat_W1", "y_hat_M1"]
+  #    append: true
 
   - kind: mqtt
     options:

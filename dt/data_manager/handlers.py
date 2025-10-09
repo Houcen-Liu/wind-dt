@@ -1,6 +1,5 @@
 from datetime import datetime,timedelta
 from typing import Dict
-import random
 
 class predictionFrame:
     def __init__(self,hour,day,week,month):
@@ -42,10 +41,11 @@ class predictionHandler:
         ret["pred_week"] = float('nan')
         ret["pred_month"] = float('nan')
 
-        ret["hour_error_average"] = float('nan')
-        ret["day_error_average"] = float('nan')
-        ret["week_error_average"] = float('nan')
-        ret["month_error_average"] = float('nan')
+        # Always send these
+        ret["hour_error_average"] = self.cur_hour_error_average
+        ret["day_error_average"] = self.cur_day_error_average
+        ret["week_error_average"] = self.cur_week_error_average
+        ret["month_error_average"] = self.cur_month_error_average
 
 
         if hour_ts in self.prediction_dict:
@@ -57,8 +57,6 @@ class predictionHandler:
             self.cur_hour_error_average = self._calc_run_avg(self.cur_hour_error_average,error,self.hour_count)
             ret["hour_error_average"]=self.cur_hour_error_average
             ret["pred_hour"]=self.prediction_dict[hour_ts].hour
-
-
         else:
             return None
         
@@ -99,5 +97,4 @@ class predictionHandler:
     def add_prediction(self,ts: datetime,data: Dict[str, float]):
         #if (ts - timedelta(minutes=10)) not in self.prediction_dict:
             #print("predictionHandler [Warning]: Prediction data for last sample was lost or not received {}".format(ts))
-        
-        self.prediction_dict[ts]=predictionFrame(data["y"]+10.00,data["y"]+10.00,data["y"]+10.00,data["y"]+10.00)
+        self.prediction_dict[ts]=predictionFrame(data["y_hat_H1"],data["y_hat_D1"],data["y_hat_W1"],data["y_hat_M1"])
