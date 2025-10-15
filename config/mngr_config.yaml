@@ -4,7 +4,7 @@ data_manager:
     broker: "localhost"
     port: 1883
     speedup: 300000
-    number_turbines: 1
+    number_turbines: 6
     scada_output_topic: "Kelmarsh/Turbine/state"
     prediction_input_topic: "Kelmarsh/ml/predictions"
     prediction_output_topic: "Kelmarsh/Predictions/current"

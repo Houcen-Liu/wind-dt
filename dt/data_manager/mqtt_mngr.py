@@ -91,11 +91,12 @@ class MQTTManager():
 
         # Handle Predictions inputs
         if(msg.topic in self.pred_input_topics):
+            idx = self.pred_input_topics.index(msg.topic)
             # Add prediction to handler
-            self.predictionHandlers[self.pred_input_topics.index(msg.topic)].add_prediction(datetime.strptime(data["ts"], '%Y-%m-%dT%H:%M:%S'),data)
+            self.predictionHandlers[idx].add_prediction(datetime.strptime(data["ts"], '%Y-%m-%dT%H:%M:%S'),data)
             # Send out prediction
             #print(data)
-            self.client.publish(self.cur_pred_topics[0], payload)
+            self.client.publish(self.cur_pred_topics[idx], payload)
         
         # Handle Control Inputs
         elif(msg.topic  == self.control_topic):
@@ -125,7 +126,7 @@ class MQTTManager():
         except StopIteration:
             print("---------- Data Manager Replay Complete ----------")
             self.running=False
-            return {"diagnostsic":"Done"}
+            return {"diagnostic":"Done"}
 
         dict_payload = {}
         for idx, val in enumerate(self.data_indexs):
@@ -151,6 +152,9 @@ class MQTTManager():
                 # Output SCADA Data
                 payload_json = json.dumps(payload)
                 self.client.publish(self.turbine_topics[i], payload_json)
+
+                if("diagnostic" in payload and payload["diagnostic"]=="Done"):
+                    break
 
                 # Calculate error of past predictions with prediction handler for turbine
                 clean_payload = {k: v for k, v in payload.items() if k != "Date and time"}

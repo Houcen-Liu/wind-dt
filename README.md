@@ -1,43 +1,62 @@
 # wind-dt — Modular Performance Twin (Prototype)
 
 A plug‑and‑play **digital twin** pipeline for wind power **performance monitoring** using **meteorological inputs only**. 
-- Swappable **stream providers** (CSV replay now; Kafka/MQTT stubs included).
-- Swappable **models** (LightGBM default; easily add SVR/Bagging).
-- Centralized **feature builder** + **physics guardrails**.
-- Pluggable **sinks** (Console + WebSocket stubs) for dashboards.
 
 ## Quickstart
+1. Install [mosquitto](https://mosquitto.org/download/)
+2. Place SCADA Data in `data/`
+3. Update `data_year` in `config/mngr_config.yaml` to match the data you placed
 
+4. Then run the following from your terminal:
 ```bash
-# 1) Create & activate venv (optional)
+#Create & activate venv (optional)
 python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-# 2) Install deps
+# Install deps
 pip install -r requirements.txt
 
-# 3) Run (replays data/data_sample.csv ~1 day @ 60x speed)
-python main.py
+# Run live replay
+python main_live.py
+
+```
+5. In a new console run:
+
+```bash
+python -m dt.visualization.dashboard <turbine number>
+```
+<i>\<turbine number\> is the number of the turbine you want to visualize. I.e. if you want to see turbine 3, replace it with 3.</i>
+
+After launching the visualization you should see:
+```bash
+Dash is running on http://127.0.0.1:8051/
 ```
 
-You should see streaming outputs like:
-```
-{'ts': '2020-01-01T00:00:00+00:00', 'v': 4.2, 'y': 120.0, 'y_hat': 110.5, 'pi': 1.086}
-```
+6. Open the link in your browser to see the visualization.
+
 
 ## Configuration
-Everything is driven by `config/config.yaml`. Switch stream/model/sinks without code changes.
+The Data manager is configured by `config/mngr_config.yaml`. 
+- **speedup**: default data replay speed (600 (seconds) / \<speedup\>)
+- **number_turbines**: number of turbines to manage (1-6)
+- **data_path**: Path to SCADA data
+- **data_year**: Year of data to use
+- **data_items**: list of columns to include in representation model
 
-- **Stream**: `csv_replay` now; later swap to `kafka` by editing YAML.
+
+The ML pipeline is configured by `config/config.yaml`. Switch stream/model/sinks without code changes.
+
+- **Stream**: Source of data for the ML pipeline
 - **Model**: `lgbm` default with monotone constraints on speed-derived features.
-- **Sinks**: `console` and/or `websocket` (stub here; pair with your dashboard).
+- **Sinks**: Where to output the results of the predictions
 
 ## Project layout
 ```
 wind-dt/
-  config/config.yaml          # choose stream/model/features/guardrails/sinks
-  dt/                         # pipeline framework
-  data/                       # drop in Turbine_Data
-  main.py                     # entrypoint
+  config/mngr_config.yaml     # Configure the Data Manager
+  config/config.yaml          # Configure the ML pipeline
+  dt/                         # Digital Twin Source code
+  data/                       # Drop in Turbine_Data
+  main_live.py                # Live Replay entrypoint
   requirements.txt
 ```
 
